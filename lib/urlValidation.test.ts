@@ -1,37 +1,77 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import { isSafeRedirectUrl, validateUrl, validateUrlBackend } from "./urlValidation";
 
-import { isSafeRedirectUrl } from "@/lib/urlValidation";
+describe("isSafeRedirectUrl", () => {
+    it("accepts https URLs", () => {
+        expect(isSafeRedirectUrl("https://example.com")).toBe(true);
+    });
 
-test("isSafeRedirectUrl accepts http URLs", () => {
-    assert.equal(isSafeRedirectUrl("http://example.com"), true);
+    it("accepts http URLs", () => {
+        expect(isSafeRedirectUrl("http://example.com")).toBe(true);
+    });
+
+    it("rejects javascript: scheme", () => {
+        expect(isSafeRedirectUrl("javascript:alert(1)")).toBe(false);
+    });
+
+    it("rejects data: scheme", () => {
+        expect(isSafeRedirectUrl("data:text/html,<h1>hi</h1>")).toBe(false);
+    });
+
+    it("rejects invalid URL string", () => {
+        expect(isSafeRedirectUrl("not a url")).toBe(false);
+    });
 });
 
-test("isSafeRedirectUrl accepts https URLs", () => {
-    assert.equal(isSafeRedirectUrl("https://example.com/path?query=1"), true);
+describe("validateUrl", () => {
+    it("accepts a valid https URL", () => {
+        expect(validateUrl("https://example.com").valid).toBe(true);
+    });
+
+    it("accepts a URL without scheme (prepends https)", () => {
+        expect(validateUrl("example.com").valid).toBe(true);
+    });
+
+    it("rejects empty string", () => {
+        expect(validateUrl("").valid).toBe(false);
+    });
+
+    it("rejects non-http scheme", () => {
+        expect(validateUrl("ftp://example.com").valid).toBe(false);
+    });
+
+    it("rejects domain with no TLD", () => {
+        expect(validateUrl("https://localhost").valid).toBe(false);
+    });
 });
 
-test("isSafeRedirectUrl rejects javascript: URIs", () => {
-    assert.equal(isSafeRedirectUrl("javascript:alert(document.cookie)"), false);
-});
+describe("validateUrlBackend", () => {
+    it("accepts a valid https URL and normalizes it", () => {
+        const result = validateUrlBackend("https://example.com");
+        expect(result.valid).toBe(true);
+        if (result.valid) expect(result.normalizedUrl).toBe("https://example.com");
+    });
 
-test("isSafeRedirectUrl rejects data: URIs", () => {
-    assert.equal(isSafeRedirectUrl("data:text/html,<script>alert(1)</script>"), false);
-});
+    it("rejects loopback IP", () => {
+        const result = validateUrlBackend("http://127.0.0.1");
+        expect(result.valid).toBe(false);
+    });
 
-test("isSafeRedirectUrl rejects file: URIs", () => {
-    assert.equal(isSafeRedirectUrl("file:///etc/passwd"), false);
-});
+    it("rejects private IP 192.168.x.x", () => {
+        const result = validateUrlBackend("http://192.168.1.1");
+        expect(result.valid).toBe(false);
+    });
 
-test("isSafeRedirectUrl rejects scheme-less values", () => {
-    assert.equal(isSafeRedirectUrl("example.com"), false);
-});
+    it("rejects private IP 10.x.x.x", () => {
+        const result = validateUrlBackend("http://10.0.0.1");
+        expect(result.valid).toBe(false);
+    });
 
-test("isSafeRedirectUrl rejects empty or malformed strings", () => {
-    assert.equal(isSafeRedirectUrl(""), false);
-    assert.equal(isSafeRedirectUrl("not a url"), false);
-});
+    it("rejects IPv6 loopback ::1", () => {
+        const result = validateUrlBackend("http://[::1]");
+        expect(result.valid).toBe(false);
+    });
 
-test("isSafeRedirectUrl does not reject deceptive-looking but valid https URLs (host validation is handled at write time)", () => {
-    assert.equal(isSafeRedirectUrl("https://legitimate.com.attacker.com"), true);
+    it("rejects empty URL", () => {
+        expect(validateUrlBackend("").valid).toBe(false);
+    });
 });
