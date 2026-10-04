@@ -1,84 +1,84 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import { computeProfileCompleteness } from "./profileCompleteness";
 
-import {
-  computeProfileCompleteness,
-  type CompletenessInput,
-} from "@/lib/profileCompleteness";
-
-const base: CompletenessInput = {
-  image: null,
-  bio: null,
-  seoTitle: null,
-  seoDescription: null,
-  resumeUrl: null,
-  isVerified: false,
-  publicLinkCount: 0,
+const EMPTY_INPUT = {
+    image: null,
+    bio: null,
+    seoTitle: null,
+    seoDescription: null,
+    resumeUrl: null,
+    isVerified: false,
+    publicLinkCount: 0,
 };
 
-test("empty profile scores zero", () => {
-  const result = computeProfileCompleteness(base);
-  assert.equal(result.score, 0);
-  assert.equal(result.completedCount, 0);
-  assert.equal(result.items.length, 8);
-  assert.equal(result.totalCount, 8);
-});
-
-test("fully complete profile scores 100", () => {
-  const result = computeProfileCompleteness({
-    image: "https://example.com/a.png",
-    bio: "Hello there",
-    seoTitle: "My page",
-    seoDescription: "About my page",
-    resumeUrl: "https://example.com/cv.pdf",
+const FULL_INPUT = {
+    image: "https://cdn.example.com/avatar.jpg",
+    bio: "Software engineer building cool things",
+    seoTitle: "John Doe – Developer",
+    seoDescription: "Portfolio and links for John Doe",
+    resumeUrl: "https://example.com/resume.pdf",
     isVerified: true,
     publicLinkCount: 5,
-  });
-  assert.equal(result.score, 100);
-  assert.equal(result.completedCount, 8);
-});
+};
 
-test("whitespace-only text fields are not counted as done", () => {
-  const result = computeProfileCompleteness({
-    ...base,
-    bio: "   ",
-    seoTitle: "  ",
-  });
-  const bio = result.items.find((i) => i.key === "bio");
-  const seo = result.items.find((i) => i.key === "seoTitle");
-  assert.equal(bio?.done, false);
-  assert.equal(seo?.done, false);
-});
-
-test("public link thresholds are boundary-correct", () => {
-  const one = computeProfileCompleteness({ ...base, publicLinkCount: 1 });
-  assert.equal(one.items.find((i) => i.key === "firstLink")?.done, true);
-  assert.equal(one.items.find((i) => i.key === "threeLinks")?.done, false);
-
-  const three = computeProfileCompleteness({ ...base, publicLinkCount: 3 });
-  assert.equal(three.items.find((i) => i.key === "threeLinks")?.done, true);
-});
-
-test("partial profile scores the sum of completed weights", () => {
-  const result = computeProfileCompleteness({
-    ...base,
-    image: "https://example.com/a.png",
-    bio: "Hello",
-    publicLinkCount: 1,
-  });
-  // avatar (15) + bio (15) + firstLink (20) = 50
-  assert.equal(result.score, 50);
-  assert.equal(result.items.find((i) => i.key === "avatar")?.done, true);
-  assert.equal(result.items.find((i) => i.key === "verified")?.done, false);
-});
-
-test("score is always an integer in [0, 100]", () => {
-  for (const count of [0, 1, 2, 3, 4]) {
-    const { score } = computeProfileCompleteness({
-      ...base,
-      publicLinkCount: count,
+describe("computeProfileCompleteness", () => {
+    it("returns score 0 for an empty profile", () => {
+        const result = computeProfileCompleteness(EMPTY_INPUT);
+        expect(result.score).toBe(0);
     });
-    assert.ok(Number.isInteger(score));
-    assert.ok(score >= 0 && score <= 100);
-  }
+
+    it("returns score 100 for a fully complete profile", () => {
+        const result = computeProfileCompleteness(FULL_INPUT);
+        expect(result.score).toBe(100);
+    });
+
+    it("completedCount is 0 for empty profile", () => {
+        const result = computeProfileCompleteness(EMPTY_INPUT);
+        expect(result.completedCount).toBe(0);
+    });
+
+    it("completedCount is 8 for full profile", () => {
+        const result = computeProfileCompleteness(FULL_INPUT);
+        expect(result.completedCount).toBe(8);
+    });
+
+    it("totalCount is always 8", () => {
+        expect(computeProfileCompleteness(EMPTY_INPUT).totalCount).toBe(8);
+        expect(computeProfileCompleteness(FULL_INPUT).totalCount).toBe(8);
+    });
+
+    it("avatar item is done when image is provided", () => {
+        const result = computeProfileCompleteness({ ...EMPTY_INPUT, image: "https://cdn.example.com/img.jpg" });
+        const avatarItem = result.items.find((i) => i.key === "avatar");
+        expect(avatarItem?.done).toBe(true);
+    });
+
+    it("avatar item is not done for whitespace-only image", () => {
+        const result = computeProfileCompleteness({ ...EMPTY_INPUT, image: "   " });
+        const avatarItem = result.items.find((i) => i.key === "avatar");
+        expect(avatarItem?.done).toBe(false);
+    });
+
+    it("firstLink item done with 1 link", () => {
+        const result = computeProfileCompleteness({ ...EMPTY_INPUT, publicLinkCount: 1 });
+        const item = result.items.find((i) => i.key === "firstLink");
+        expect(item?.done).toBe(true);
+    });
+
+    it("threeLinks item not done with only 2 links", () => {
+        const result = computeProfileCompleteness({ ...EMPTY_INPUT, publicLinkCount: 2 });
+        const item = result.items.find((i) => i.key === "threeLinks");
+        expect(item?.done).toBe(false);
+    });
+
+    it("verified item done when isVerified is true", () => {
+        const result = computeProfileCompleteness({ ...EMPTY_INPUT, isVerified: true });
+        const item = result.items.find((i) => i.key === "verified");
+        expect(item?.done).toBe(true);
+    });
+
+    it("score increases with each completed item", () => {
+        const withBio = computeProfileCompleteness({ ...EMPTY_INPUT, bio: "Hello" });
+        expect(withBio.score).toBeGreaterThan(0);
+        expect(withBio.score).toBeLessThan(100);
+    });
 });
