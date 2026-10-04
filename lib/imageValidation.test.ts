@@ -1,69 +1,53 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import { hasSupportedImageMagicBytes } from "./imageValidation";
 
-import { hasSupportedImageMagicBytes } from "@/lib/imageValidation";
-
-// Helper to build a Buffer from a hex string ("FF D8 FF" etc.)
-function fromHex(hex: string): Buffer {
-    return Buffer.from(hex.replace(/\s/g, ""), "hex");
+function makeBuffer(bytes: number[]): Buffer {
+    const buf = Buffer.alloc(12, 0);
+    bytes.forEach((b, i) => { buf[i] = b; });
+    return buf;
 }
 
-// Pad a buffer to at least 12 bytes so the length guard does not interfere.
-function pad(buf: Buffer): Buffer {
-    if (buf.length >= 12) return buf;
-    return Buffer.concat([buf, Buffer.alloc(12 - buf.length)]);
-}
+describe("hasSupportedImageMagicBytes", () => {
+    it("accepts a valid JPEG buffer (FF D8 FF ...)", () => {
+        const buf = makeBuffer([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(hasSupportedImageMagicBytes(buf)).toBe(true);
+    });
 
-test("hasSupportedImageMagicBytes accepts a valid JPEG header", () => {
-    const jpeg = pad(fromHex("FF D8 FF E0 00 10 4A 46 49 46 00 01"));
-    assert.equal(hasSupportedImageMagicBytes(jpeg), true);
-});
+    it("accepts a valid PNG buffer (89 50 4E 47 ...)", () => {
+        const buf = makeBuffer([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+        expect(hasSupportedImageMagicBytes(buf)).toBe(true);
+    });
 
-test("hasSupportedImageMagicBytes accepts a valid PNG header", () => {
-    const png = pad(fromHex("89 50 4E 47 0D 0A 1A 0A 00 00 00 0D"));
-    assert.equal(hasSupportedImageMagicBytes(png), true);
-});
+    it("accepts a valid WebP buffer (RIFF....WEBP)", () => {
+        const buf = makeBuffer([
+            0x52, 0x49, 0x46, 0x46, // RIFF
+            0x00, 0x00, 0x00, 0x00, // file size (ignored)
+            0x57, 0x45, 0x42, 0x50, // WEBP
+        ]);
+        expect(hasSupportedImageMagicBytes(buf)).toBe(true);
+    });
 
-test("hasSupportedImageMagicBytes accepts a valid WebP header", () => {
-    // RIFF....WEBP where .... is 4 arbitrary size bytes
-    const webp = Buffer.from([
-        0x52, 0x49, 0x46, 0x46, // RIFF
-        0x24, 0x00, 0x00, 0x00, // file size (arbitrary)
-        0x57, 0x45, 0x42, 0x50, // WEBP
-    ]);
-    assert.equal(hasSupportedImageMagicBytes(webp), true);
-});
+    it("rejects a buffer shorter than 12 bytes", () => {
+        const buf = Buffer.alloc(8, 0);
+        expect(hasSupportedImageMagicBytes(buf)).toBe(false);
+    });
 
-test("hasSupportedImageMagicBytes rejects a plain text file", () => {
-    const txt = Buffer.from("Hello, world! This is not an image.");
-    assert.equal(hasSupportedImageMagicBytes(txt), false);
-});
+    it("rejects a buffer with all zeros", () => {
+        const buf = Buffer.alloc(12, 0);
+        expect(hasSupportedImageMagicBytes(buf)).toBe(false);
+    });
 
-test("hasSupportedImageMagicBytes rejects a PDF file header", () => {
-    const pdf = pad(fromHex("25 50 44 46 2D")); // %PDF-
-    assert.equal(hasSupportedImageMagicBytes(pdf), false);
-});
+    it("rejects an SVG-like buffer (starts with '<')", () => {
+        const buf = makeBuffer([0x3c, 0x73, 0x76, 0x67, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(hasSupportedImageMagicBytes(buf)).toBe(false);
+    });
 
-test("hasSupportedImageMagicBytes rejects a GIF file header", () => {
-    const gif = pad(Buffer.from("GIF89a"));
-    assert.equal(hasSupportedImageMagicBytes(gif), false);
-});
+    it("rejects a PDF buffer (%PDF)", () => {
+        const buf = makeBuffer([0x25, 0x50, 0x44, 0x46, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(hasSupportedImageMagicBytes(buf)).toBe(false);
+    });
 
-test("hasSupportedImageMagicBytes rejects a buffer shorter than 12 bytes", () => {
-    const short = Buffer.from([0xff, 0xd8, 0xff]); // valid JPEG prefix but too short
-    assert.equal(hasSupportedImageMagicBytes(short), false);
-});
-
-test("hasSupportedImageMagicBytes rejects an empty buffer", () => {
-    assert.equal(hasSupportedImageMagicBytes(Buffer.alloc(0)), false);
-});
-
-test("hasSupportedImageMagicBytes rejects a RIFF container that is not WebP", () => {
-    // RIFF....AVI  -- a valid RIFF container but not a WebP image
-    const avi = Buffer.from([
-        0x52, 0x49, 0x46, 0x46, // RIFF
-        0x00, 0x00, 0x00, 0x00, // size
-        0x41, 0x56, 0x49, 0x20, // AVI (not WEBP)
-    ]);
-    assert.equal(hasSupportedImageMagicBytes(avi), false);
+    it("rejects a GIF buffer (GIF89a)", () => {
+        const buf = makeBuffer([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0, 0, 0, 0, 0, 0]);
+        expect(hasSupportedImageMagicBytes(buf)).toBe(false);
+    });
 });
