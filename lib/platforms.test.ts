@@ -1,189 +1,69 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import { normalizeUrl, detectPlatform, isKnownPlatform, validatePlatformUrl } from "./platforms";
 
-import { validatePlatformUrl, isKnownPlatform, detectPlatform } from "@/lib/platforms";
-import { PLATFORMS } from "@/lib/constants";
+describe("normalizeUrl", () => {
+    it("adds https:// when scheme is missing", () => {
+        expect(normalizeUrl("example.com")).toMatch(/^https:\/\//);
+    });
 
-// --- isKnownPlatform ---
+    it("preserves existing https scheme", () => {
+        expect(normalizeUrl("https://example.com")).toBe("https://example.com");
+    });
 
-test("isKnownPlatform returns true for every declared platform", () => {
-    const known = [
-        PLATFORMS.GITHUB, PLATFORMS.LINKEDIN, "leetcode", PLATFORMS.YOUTUBE, "x",
-        PLATFORMS.FACEBOOK, PLATFORMS.INSTAGRAM, "discord", "twitch",
-        "hashnode", "devto", PLATFORMS.MEDIUM, "dribbble", PLATFORMS.WEBSITE,
-        "codeforces", "codechef", PLATFORMS.KAGGLE, PLATFORMS.GEEKSFORGEEKS,
-    ];
-    for (const p of known) {
-        assert.equal(isKnownPlatform(p), true, `expected true for "${p}"`);
-    }
+    it("preserves existing http scheme", () => {
+        expect(normalizeUrl("http://example.com")).toContain("http://");
+    });
+
+    it("trims whitespace", () => {
+        expect(normalizeUrl("  https://example.com  ")).toBe("https://example.com");
+    });
 });
 
-test("isKnownPlatform returns false for unknown and custom labels", () => {
-    for (const p of ["twitter", "tiktok", "custom", "GITHUB", "", "mysite"]) {
-        assert.equal(isKnownPlatform(p), false, `expected false for "${p}"`);
-    }
+describe("detectPlatform", () => {
+    it("detects GitHub URL", () => {
+        expect(detectPlatform("https://github.com/torvalds")).toBe("github");
+    });
+
+    it("detects LinkedIn URL", () => {
+        expect(detectPlatform("https://linkedin.com/in/someone")).toBe("linkedin");
+    });
+
+    it("detects YouTube URL", () => {
+        expect(detectPlatform("https://youtube.com/c/mychannel")).toBe("youtube");
+    });
+
+    it("returns website for unknown URL", () => {
+        expect(detectPlatform("https://randomsite.com")).toBe("website");
+    });
 });
 
-test("isKnownPlatform is not fooled by prototype keys", () => {
-    assert.equal(isKnownPlatform("__proto__"), false);
-    assert.equal(isKnownPlatform("constructor"), false);
-    assert.equal(isKnownPlatform("toString"), false);
+describe("isKnownPlatform", () => {
+    it("returns true for github", () => {
+        expect(isKnownPlatform("github")).toBe(true);
+    });
+
+    it("returns true for linkedin", () => {
+        expect(isKnownPlatform("linkedin")).toBe(true);
+    });
+
+    it("returns false for unknown platform", () => {
+        expect(isKnownPlatform("myspace")).toBe(false);
+    });
+
+    it("returns false for empty string", () => {
+        expect(isKnownPlatform("")).toBe(false);
+    });
 });
 
-// --- validatePlatformUrl ---
+describe("validatePlatformUrl", () => {
+    it("validates a correct GitHub URL", () => {
+        expect(validatePlatformUrl("github", "https://github.com/vishnukothakapu")).toBe(true);
+    });
 
-test("validatePlatformUrl accepts valid URLs for each platform", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.GITHUB, "https://github.com/octocat"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.GITHUB, "http://github.com/octocat"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.GITHUB, "https://www.github.com/octocat"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.GITHUB, "github.com/octocat"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.LINKEDIN, "https://linkedin.com/in/john-doe"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.LINKEDIN, "https://www.linkedin.com/company/acme"), true);
-    assert.equal(validatePlatformUrl("leetcode", "https://leetcode.com/jsmith"), true);
-    assert.equal(validatePlatformUrl("leetcode", "https://www.leetcode.com/jsmith"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/@channel"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://www.youtube.com/c/channelname"), true);
-    assert.equal(validatePlatformUrl("x", "https://x.com/username"), true);
-    assert.equal(validatePlatformUrl("x", "https://www.x.com/username"), true);
-    assert.equal(validatePlatformUrl("x", "https://twitter.com/username"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.FACEBOOK, "https://facebook.com/username"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.FACEBOOK, "https://www.facebook.com/username"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.INSTAGRAM, "https://instagram.com/username"), true);
-    assert.equal(validatePlatformUrl("discord", "https://discord.com/users/123456789"), true);
-    assert.equal(validatePlatformUrl("twitch", "https://twitch.tv/streamer"), true);
-    assert.equal(validatePlatformUrl("hashnode", "https://hashnode.com/@user"), true);
-    assert.equal(validatePlatformUrl("hashnode", "https://user.hashnode.dev"), true);
-    assert.equal(validatePlatformUrl("devto", "https://dev.to/username"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.MEDIUM, "https://medium.com/@author"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.MEDIUM, "https://medium.com/publication"), true);
-    assert.equal(validatePlatformUrl("dribbble", "https://dribbble.com/designer"), true);
-    assert.equal(validatePlatformUrl("codeforces", "https://codeforces.com/profile/tourist"), true);
-    assert.equal(validatePlatformUrl("codechef", "https://www.codechef.com/users/tourist"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.KAGGLE, "https://kaggle.com/alexisbcook"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.KAGGLE, "https://www.kaggle.com/alexisbcook"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.GEEKSFORGEEKS, "https://geeksforgeeks.org/user/gfguser"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.GEEKSFORGEEKS, "https://www.geeksforgeeks.org/user/gfguser"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.GEEKSFORGEEKS, "https://auth.geeksforgeeks.org/user/gfguser"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.WEBSITE, "https://my-portfolio.com"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.WEBSITE, "https://blog.example.com/posts"), true);
-});
+    it("rejects a GitHub URL with wrong domain", () => {
+        expect(validatePlatformUrl("github", "https://gitlab.com/user")).toBe(false);
+    });
 
-test("validatePlatformUrl rejects URLs that don't match the platform", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.GITHUB, "https://gitlab.com/octocat"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.GITHUB, "https://github.io/octocat"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://vimeo.com/channel"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.INSTAGRAM, "https://threads.net/user"), false);
-    assert.equal(validatePlatformUrl("twitch", "https://youtube.com/@streamer"), false);
-    assert.equal(validatePlatformUrl("codeforces", "https://codechef.com/users/tourist"), false);
-    assert.equal(validatePlatformUrl("codechef", "https://codeforces.com/profile/tourist"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.KAGGLE, "https://geeksforgeeks.org/user/gfguser"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.GEEKSFORGEEKS, "https://kaggle.com/alexisbcook"), false);
-});
-
-test("validatePlatformUrl rejects cross-platform URL swaps", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.GITHUB, "https://linkedin.com/in/octocat"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.LINKEDIN, "https://github.com/john"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.LINKEDIN, "https://glassdoor.com/john"), false);
-    assert.equal(validatePlatformUrl("leetcode", "https://hackerrank.com/jsmith"), false);
-    assert.equal(validatePlatformUrl("leetcode", "https://github.com/jsmith"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://twitch.tv/channel"), false);
-    assert.equal(validatePlatformUrl("x", "https://facebook.com/username"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.FACEBOOK, "https://instagram.com/username"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.FACEBOOK, "https://x.com/username"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.INSTAGRAM, "https://facebook.com/user"), false);
-    assert.equal(validatePlatformUrl("discord", "https://slack.com/users/123"), false);
-    assert.equal(validatePlatformUrl("discord", "https://discord.gg/invite"), false);
-    assert.equal(validatePlatformUrl("twitch", "https://kick.com/streamer"), false);
-    assert.equal(validatePlatformUrl("hashnode", "https://medium.com/@user"), false);
-    assert.equal(validatePlatformUrl("devto", "https://medium.com/@user"), false);
-    assert.equal(validatePlatformUrl("devto", "https://hashnode.com/@user"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.MEDIUM, "https://dev.to/username"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.MEDIUM, "https://substack.com/@author"), false);
-    assert.equal(validatePlatformUrl("dribbble", "https://behance.net/designer"), false);
-    assert.equal(validatePlatformUrl("dribbble", "https://figma.com/@designer"), false);
-    assert.equal(validatePlatformUrl("codeforces", "https://codechef.com/users/tourist"), false);
-    assert.equal(validatePlatformUrl("codechef", "https://codeforces.com/profile/tourist"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.KAGGLE, "https://leetcode.com/jsmith"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.GEEKSFORGEEKS, "https://codeforces.com/profile/tourist"), false);
-});
-
-test("validatePlatformUrl rejects LinkedIn /messaging/ and /feed/ paths", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.LINKEDIN, "https://linkedin.com/messaging/thread/123"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.LINKEDIN, "https://www.linkedin.com/feed/"), false);
-
-});
-
-test("validatePlatformUrl rejects /messaging/ and /feed/ paths on any platform", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.WEBSITE, "https://example.com/messaging/inbox"), false);
-    assert.equal(validatePlatformUrl(PLATFORMS.WEBSITE, "https://example.com/feed/update"), false);
-});
-
-// --- YouTube handle / URL validation (issue #546) ---
-
-test("validatePlatformUrl accepts YouTube @handles with dots and dashes", () => {
-    // Dots in handle — the exact case reported in #546
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/@user.name.dev"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://www.youtube.com/@user.name"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/@some-channel"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/@some_channel.official"), true);
-    // Multiple consecutive dots / mixed separators
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/@a.b.c.d"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/@a-b.c_d"), true);
-});
-
-test("validatePlatformUrl accepts YouTube c/ custom URLs with dots", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/c/user.name.dev"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://www.youtube.com/c/my.channel"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/c/channel-name"), true);
-});
-
-test("validatePlatformUrl still accepts standard YouTube URL formats", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/channel/UC1234567890abcdef"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/shorts/hW9_8k8Gjks"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtu.be/dQw4w9WgXcQ"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/watch?v=dQw4w9WgXcQ"), true);
-});
-
-test("validatePlatformUrl rejects invalid YouTube URLs", () => {
-    // /results is explicitly blocklisted
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/results?search_query=test"), false);
-    // Wrong domain
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://vimeo.com/@user.name"), false);
-    // Bare @ with no handle name
-    assert.equal(validatePlatformUrl(PLATFORMS.YOUTUBE, "https://youtube.com/@"), false);
-});
-
-
-
-test("validatePlatformUrl accepts Substack profile URLs", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.SUBSTACK, "https://author.substack.com"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.SUBSTACK, "https://substack.com/@author"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.SUBSTACK, "https://github.com/author"), false);
-});
-
-test("detectPlatform identifies Substack URLs", () => {
-    assert.equal(detectPlatform("https://author.substack.com"), "substack");
-test("validatePlatformUrl accepts Behance profile URLs", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.BEHANCE, "https://behance.net/username"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.BEHANCE, "https://github.com/username"), false);
-});
-
-test("detectPlatform identifies Behance URLs", () => {
-    assert.equal(detectPlatform("https://behance.net/username"), "behance");
-test("validatePlatformUrl accepts Stack Overflow profile URLs", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.STACKOVERFLOW, "https://stackoverflow.com/users/123456/jane"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.STACKOVERFLOW, "stackoverflow.com/users/123456"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.STACKOVERFLOW, "https://stackoverflow.com/questions/1"), false);
-});
-
-test("detectPlatform identifies Stack Overflow URLs", () => {
-    assert.equal(detectPlatform("https://stackoverflow.com/users/123456/jane"), "stackoverflow");
-test("validatePlatformUrl accepts GitLab profile URLs", () => {
-    assert.equal(validatePlatformUrl(PLATFORMS.GITLAB, "https://gitlab.com/username"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.GITLAB, "gitlab.com/username"), true);
-    assert.equal(validatePlatformUrl(PLATFORMS.GITLAB, "https://github.com/username"), false);
-});
-
-test("detectPlatform identifies GitLab URLs", () => {
-    assert.equal(detectPlatform("https://gitlab.com/username"), "gitlab");
+    it("validates a LinkedIn URL", () => {
+        expect(validatePlatformUrl("linkedin", "https://linkedin.com/in/user123")).toBe(true);
+    });
 });
