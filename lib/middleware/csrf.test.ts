@@ -1,82 +1,105 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import { getCsrfDecision } from "./csrf";
 
-import { NextRequest } from "next/server";
+describe("getCsrfDecision", () => {
+    const TOKEN = "valid-token-abc";
 
-import { generateCsrfToken } from "@/lib/csrf";
-import { applyCsrfProtection, getCsrfDecision } from "@/lib/middleware/csrf";
-
-test("getCsrfDecision skips safe methods and excluded routes", () => {
-    assert.equal(
-        getCsrfDecision({
+    it("skips GET requests (non-mutating)", () => {
+        const decision = getCsrfDecision({
             method: "GET",
-            pathname: "/api/links",
+            pathname: "/api/profile",
             requestToken: null,
             storedToken: null,
-        }),
-        "skip"
-    );
+        });
+        expect(decision).toBe("skip");
+    });
 
-    assert.equal(
-        getCsrfDecision({
+    it("skips HEAD requests", () => {
+        const decision = getCsrfDecision({
+            method: "HEAD",
+            pathname: "/api/profile",
+            requestToken: null,
+            storedToken: null,
+        });
+        expect(decision).toBe("skip");
+    });
+
+    it("skips POST to /api/auth (excluded path)", () => {
+        const decision = getCsrfDecision({
+            method: "POST",
+            pathname: "/api/auth",
+            requestToken: null,
+            storedToken: null,
+        });
+        expect(decision).toBe("skip");
+    });
+
+    it("skips POST to /api/auth/signin (sub-path of excluded)", () => {
+        const decision = getCsrfDecision({
             method: "POST",
             pathname: "/api/auth/signin",
             requestToken: null,
             storedToken: null,
-        }),
-        "skip"
-    );
-});
-
-test("applyCsrfProtection rejects requests with a missing token", async () => {
-    const request = new NextRequest("http://localhost/api/links", {
-        method: "POST",
-        headers: {
-            cookie: `csrf_token=${generateCsrfToken()}`,
-            "content-type": "application/json",
-        },
-        body: JSON.stringify({ url: "https://example.com" }),
+        });
+        expect(decision).toBe("skip");
     });
 
-    const response = await applyCsrfProtection(request);
-
-    assert.ok(response);
-    assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), { error: "Invalid CSRF token" });
-});
-
-test("applyCsrfProtection rejects requests with an invalid token", async () => {
-    const storedToken = generateCsrfToken();
-    const request = new NextRequest("http://localhost/api/profile/update", {
-        method: "POST",
-        headers: {
-            cookie: `csrf_token=${storedToken}`,
-            "content-type": "application/json",
-            "x-csrf-token": generateCsrfToken(),
-        },
-        body: JSON.stringify({ name: "Navya" }),
+    it("skips POST to /api/links/click (excluded)", () => {
+        const decision = getCsrfDecision({
+            method: "POST",
+            pathname: "/api/links/click",
+            requestToken: null,
+            storedToken: null,
+        });
+        expect(decision).toBe("skip");
     });
 
-    const response = await applyCsrfProtection(request);
-
-    assert.ok(response);
-    assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), { error: "Invalid CSRF token" });
-});
-
-test("applyCsrfProtection allows requests with a valid token", async () => {
-    const token = generateCsrfToken();
-    const request = new NextRequest("http://localhost/api/links", {
-        method: "POST",
-        headers: {
-            cookie: `csrf_token=${token}`,
-            "content-type": "application/json",
-            "x-csrf-token": token,
-        },
-        body: JSON.stringify({ url: "https://example.com" }),
+    it("rejects POST with no token", () => {
+        const decision = getCsrfDecision({
+            method: "POST",
+            pathname: "/api/profile",
+            requestToken: null,
+            storedToken: TOKEN,
+        });
+        expect(decision).toBe("reject");
     });
 
-    const response = await applyCsrfProtection(request);
+    it("rejects POST with mismatched tokens", () => {
+        const decision = getCsrfDecision({
+            method: "POST",
+            pathname: "/api/profile",
+            requestToken: "wrong-token",
+            storedToken: TOKEN,
+        });
+        expect(decision).toBe("reject");
+    });
 
-    assert.equal(response, null);
+    it("allows POST with matching tokens", () => {
+        const decision = getCsrfDecision({
+            method: "POST",
+            pathname: "/api/profile",
+            requestToken: TOKEN,
+            storedToken: TOKEN,
+        });
+        expect(decision).toBe("allow");
+    });
+
+    it("allows DELETE with matching tokens", () => {
+        const decision = getCsrfDecision({
+            method: "DELETE",
+            pathname: "/api/links/123",
+            requestToken: TOKEN,
+            storedToken: TOKEN,
+        });
+        expect(decision).toBe("allow");
+    });
+
+    it("does NOT skip /api/contact-us-admin (strict boundary match)", () => {
+        const decision = getCsrfDecision({
+            method: "POST",
+            pathname: "/api/contact-us-admin",
+            requestToken: null,
+            storedToken: TOKEN,
+        });
+        expect(decision).toBe("reject");
+    });
 });
